@@ -1,0 +1,73 @@
+local tool = script.Parent
+
+local ServiceFolder = game.ServerScriptService:WaitForChild("AnimationLiteService")
+local PlayEvent = ServiceFolder:WaitForChild("AnimationLitePlayEvent")
+local AnimFolder = game.ServerStorage:WaitForChild("RBX_ANIMSAVES")
+local KeyframeSequence = AnimFolder:WaitForChild("nomedaanimaçao")
+
+local debounce = false
+local cooldownTime = 2 -- tempo entre execuções
+local damage = 20 -- dano do golpe
+local hitRadius = 3 -- distância em studs
+
+
+-----------------------------
+-- FUNÇÃO DO DANO EM ÁREA
+-----------------------------
+local function areaDamage(character)
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    -- Pega todos os players próximos
+    for _, playerChar in pairs(game.Workspace:GetChildren()) do
+        if playerChar:IsA("Model") and playerChar:FindFirstChild("Humanoid") then
+
+            -- ignora o próprio jogador
+            if playerChar ~= character then
+                local enemyRoot = playerChar:FindFirstChild("HumanoidRootPart")
+
+                if enemyRoot then
+                    local distance = (root.Position - enemyRoot.Position).Magnitude
+
+                    -- só causa dano 1 vez ao inimigo se estiver dentro da área
+                    if distance <= hitRadius then
+                        playerChar.Humanoid:TakeDamage(damage)
+                    end
+                end
+            end
+        end
+    end
+end
+
+
+
+-----------------------------
+-- QUANDO USA A FERRAMENTA
+-----------------------------
+tool.Activated:Connect(function()
+    if debounce then
+        return
+    end
+
+    debounce = true
+
+    local character = tool.Parent
+    if character and character:FindFirstChild("Humanoid") then
+        -- ativa sua animação
+        PlayEvent:Fire(
+            character,
+            KeyframeSequence,
+            1
+        )
+    end
+
+    -- Depois de 0.3s a hitbox aparece (configure se quiser)
+    task.wait(0.3)
+
+    -- DANO EM ÁREA (APENAS UMA VEZ)
+    areaDamage(character)
+
+    -- Espera cooldown
+    task.wait(cooldownTime)
+    debounce = false
+end)
