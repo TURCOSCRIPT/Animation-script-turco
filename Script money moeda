@@ -1,1 +1,210 @@
 
+-- SISTEMA DE MOEDAS POR COLISÃO - CORRIGIDO
+-- ServerScript em ServerScriptService
+
+local Players = game:GetService("Players")
+local Debris = game:GetService("Debris")
+
+-- ID do som
+local SOM_ID = 133570405319995
+
+-- DEBUG: Função melhorada para extrair valor
+local function extrairValorMoeda(nome)
+    if not nome then return nil end
+    
+    -- Converter para maiúsculo para garantir
+    local nomeUpper = nome:upper()
+    
+    -- Procura MOEDA seguido de números no início do nome
+    local numero = nomeUpper:match("^MOEDA(%d+)")
+    
+    -- Se não achou no início, procura em qualquer lugar
+    if not numero then
+        numero = nomeUpper:match("MOEDA(%d+)")
+    end
+    
+    if numero then
+        local valor = tonumber(numero)
+        print("✅ Valor extraído de '" .. nome .. "': " .. valor)
+        return valor
+    end
+    
+    print("❌ Não conseguiu extrair valor de: '" .. nome .. "'")
+    return nil
+end
+
+-- Configurar leaderstats
+Players.PlayerAdded:Connect(function(player)
+    local leaderstats = player:FindFirstChild("leaderstats")
+    if not leaderstats then
+        leaderstats = Instance.new("Folder")
+        leaderstats.Name = "leaderstats"
+        leaderstats.Parent = player
+        
+        local coins = Instance.new("IntValue")
+        coins.Name = "Coins"
+        coins.Value = 0
+        coins.Parent = leaderstats
+        print("💾 Leaderstats criado para " .. player.Name)
+    end
+end)
+
+-- Tocar som
+local function tocarSom(posicao)
+    local som = Instance.new("Sound")
+    som.SoundId = "rbxassetid://" .. SOM_ID
+    som.Volume = 0.5
+    som.Parent = workspace
+    
+    local part = Instance.new("Part")
+    part.Anchored = true
+    part.CanCollide = false
+    part.Transparency = 1
+    part.Size = Vector3.new(1, 1, 1)
+    part.Position = posicao
+    part.Parent = workspace
+    
+    som.Parent = part
+    som:Play()
+    
+    som.Ended:Connect(function()
+        part:Destroy()
+    end)
+    
+    Debris:AddItem(part, 5)
+end
+
+-- Configurar moeda
+local function configurarMoeda(objeto)
+    -- DEBUG: Mostrar o que está tentando configurar
+    print("🔍 Tentando configurar: " .. tostring(objeto.Name) .. " (" .. objeto.ClassName .. ")")
+    
+    local valor = extrairValorMoeda(objeto.Name)
+    if not valor then return end
+    
+    print("💰 Moeda válida encontrada: " .. objeto.Name .. " = " .. valor .. " moedas")
+    
+    -- Se for Part/MeshPart direto
+    if objeto:IsA("BasePart") then
+        objeto.CanCollide = false
+        
+        -- Criar valor como atributo para referência
+        objeto:SetAttribute("ValorMoeda", valor)
+        
+        objeto.Touched:Connect(function(hit)
+            -- DEBUG
+            print("💥 Tocado por: " .. tostring(hit.Name))
+            
+            local character = hit:FindFirstAncestorOfClass("Model")
+            if not character then 
+                print("❌ Sem character")
+                return 
+            end
+            
+            local player = Players:GetPlayerFromCharacter(character)
+            if not player then 
+                print("❌ Sem player")
+                return 
+            end
+            
+            -- Verificar se já coletou
+            if objeto:GetAttribute("Coletada") then 
+                print("⚠️ Já coletada")
+                return 
+            end
+            objeto:SetAttribute("Coletada", true)
+            
+            -- Pegar valor do atributo (mais seguro)
+            local valorReal = objeto:GetAttribute("ValorMoeda") or valor
+            
+            -- Dar dinheiro
+            local leaderstats = player:FindFirstChild("leaderstats")
+            if leaderstats then
+                local coins = leaderstats:FindFirstChild("Coins")
+                if coins then
+                    local valorAntes = coins.Value
+                    coins.Value = coins.Value + valorReal
+                    print("💵 DINHEIRO ADICIONADO! " .. player.Name .. ": " .. valorAntes .. " -> " .. coins.Value .. " (+" .. valorReal .. ")")
+                else
+                    print("❌ Não achou Coins em leaderstats")
+                end
+            else
+                print("❌ Não achou leaderstats")
+            end
+            
+            -- Som
+            tocarSom(objeto.Position)
+            
+            -- Efeito visual
+            local tweenService = game:GetService("TweenService")
+            local tween = tweenService:Create(objeto, TweenInfo.new(0.2), {
+            Size = Vector3.new(0.1, 0.1, 0.1),
+            Transparency = 1
+            })
+            tween:Play()
+            
+            tween.Completed:Connect(function()
+                objeto:Destroy()
+            end)
+        end)
+        
+        -- Se for Model
+    elseif objeto:IsA("Model") then
+        objeto:SetAttribute("ValorMoeda", valor)
+        
+        local touchPart = nil
+        
+        -- Procurar parte para colisão
+        for _, filho in pairs(objeto:GetDescendants()) do
+            if filho:IsA("BasePart") and not touchPart then
+                touchPart = filho
+                filho.CanCollide = false
+            elseif filho:IsA("BasePart") then
+                filho.CanCollide = false
+            end
+        end
+        
+        if touchPart then
+            touchPart.Touched:Connect(function(hit)
+                local character = hit:FindFirstAncestorOfClass("Model")
+                if not character then return end
+                
+                local player = Players:GetPlayerFromCharacter(character)
+                if not player then return end
+                
+                if objeto:GetAttribute("Coletada") then return end
+                objeto:SetAttribute("Coletada", true)
+                
+                local valorReal = objeto:GetAttribute("ValorMoeda") or valor
+                
+                local leaderstats = player:FindFirstChild("leaderstats")
+                if leaderstats then
+                    local coins = leaderstats:FindFirstChild("Coins")
+                    if coins then
+                        coins.Value = coins.Value + valorReal
+                        print("💵 " .. player.Name .. " ganhou " .. valorReal .. " moedas!")
+                    end
+                end
+                
+                local pos = objeto:GetPivot().Position
+                tocarSom(pos)
+                
+                objeto:Destroy()
+            end)
+        end
+    end
+end
+
+-- Configurar existentes
+print("🚀 Iniciando sistema...")
+for _, obj in pairs(workspace:GetDescendants()) do
+    configurarMoeda(obj)
+end
+
+-- Novas moedas
+workspace.DescendantAdded:Connect(function(obj)
+    task.wait(0.1)
+    configurarMoeda(obj)
+end)
+
+print("✅ Sistema pronto!")
