@@ -1,1 +1,109 @@
 
+-- Sistema de Toque e Moedas - VERSÃO CORRIGIDA
+-- Coloque em StarterPlayerScripts como LocalScript
+ 
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+ 
+local player = Players.LocalPlayer
+ 
+-- Esperar tudo carregar
+repeat task.wait() until player:FindFirstChild("PlayerGui")
+ 
+-- Criar ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "CoinSystem"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player.PlayerGui
+ 
+-- Setup leaderstats
+local leaderstats = player:FindFirstChild("leaderstats")
+if not leaderstats then
+    leaderstats = Instance.new("Folder")
+    leaderstats.Name = "leaderstats"
+    leaderstats.Parent = player
+end
+ 
+local coins = leaderstats:FindFirstChild("Coins")
+if not coins then
+    coins = Instance.new("IntValue")
+    coins.Name = "Coins"
+    coins.Value = 0
+    coins.Parent = leaderstats
+end
+ 
+-- Config
+local TEMPO_MAXIMO = 1 -- segundos
+local MOEDAS_POR_CLIQUE = 1
+ 
+-- Controle
+local tempoInicio = 0
+local estaPressionado = false
+ 
+-- Criar efeito +1
+local function mostrarMoeda(x, y)
+    local label = Instance.new("TextLabel")
+    label.Text = "+" .. MOEDAS_POR_CLIQUE
+    label.Size = UDim2.new(0, 60, 0, 40)
+    label.Position = UDim2.new(0, x - 30, 0, y - 20)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255, 215, 0)
+    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    label.TextStrokeTransparency = 0
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 28
+    label.Parent = screenGui
+    
+    -- Animação subir e sumir
+    local tween = TweenService:Create(
+    label,
+    TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+    {
+    Position = UDim2.new(0, x - 30, 0, y - 80),
+    TextTransparency = 1,
+    TextStrokeTransparency = 1
+    }
+    )
+    
+    tween:Play()
+    tween.Completed:Connect(function()
+        label:Destroy()
+    end)
+end
+ 
+-- Toque começou
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.UserInputType == Enum.UserInputType.Touch or 
+        input.UserInputType == Enum.UserInputType.MouseButton1 then
+        
+        tempoInicio = tick()
+        estaPressionado = true
+    end
+end)
+ 
+-- Toque terminou
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if input.UserInputType == Enum.UserInputType.Touch or 
+        input.UserInputType == Enum.UserInputType.MouseButton1 then
+        
+        if not estaPressionado then return end
+        estaPressionado = false
+        
+        local duracao = tick() - tempoInicio
+        
+        -- Só conta se foi rápido (< 1 segundo)
+        if duracao <= TEMPO_MAXIMO then
+            -- Adicionar moeda
+            coins.Value = coins.Value + MOEDAS_POR_CLIQUE
+            
+            -- Mostrar efeito na posição do mouse/toque
+            local pos = input.Position
+            mostrarMoeda(pos.X, pos.Y)
+        end
+    end
+end)
+ 
+print("✅ Sistema de moedas carregado! Toque rápido para ganhar.")
