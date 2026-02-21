@@ -1,0 +1,450 @@
+-- SISTEMA DE VENDA POR PROXIMITY PROMPT (SEM FLOP DE MSG DO TURCO)
+-- Coloque este script em ServerScriptService
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+
+-- Configurações
+local CONFIG = {
+	PrefixoMoeda = "Coins",
+	CorSelecionado = Color3.fromRGB(0, 255, 100),
+	CorNormal = Color3.fromRGB(60, 60, 60),
+	TempoTween = 0.2,
+	SomVenda = 98484767246085
+}
+
+-- Criar RemoteEvent
+local venderEvent = ReplicatedStorage:FindFirstChild("VenderItens")
+if not venderEvent then
+	venderEvent = Instance.new("RemoteEvent")
+	venderEvent.Name = "VenderItens"
+	venderEvent.Parent = ReplicatedStorage
+end
+
+-- Extrair valor (CARNE10 -> 10)
+local function extrairValor(nome)
+	local numero = nome:match("(%d+)$")
+	return tonumber(numero) or 0
+end
+
+-- Extrair nome base (CARNE10 -> CARNE)
+local function extrairNomeBase(nome)
+	return nome:match("^(%a+)") or nome
+end
+
+-- Tocar som
+local function tocarSom(player, somId)
+	local character = player.Character
+	if not character then return end
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	
+	local som = Instance.new("Sound")
+	som.SoundId = "rbxassetid://"..somId
+	som.Volume = 0.5
+	som.Parent = hrp
+	som:Play()
+	som.Ended:Connect(function() som:Destroy() end)
+end
+
+-- Criar GUI
+local function criarGUI(player)
+	local playerGui = player:WaitForChild("PlayerGui")
+	local antiga = playerGui:FindFirstChild("VendaGUI")
+	if antiga then antiga:Destroy() end
+	
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "VendaGUI"
+	gui.ResetOnSpawn = false
+	gui.Enabled = false
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	
+	local frame = Instance.new("Frame")
+	frame.Name = "MainFrame"
+	frame.Size = UDim2.new(0, 320, 0, 400)
+	frame.Position = UDim2.new(0.5, -160, 0.5, -200)
+	frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	frame.BorderSizePixel = 0
+	frame.Parent = gui
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 10)
+	corner.Parent = frame
+	
+	local titulo = Instance.new("TextLabel")
+	titulo.Name = "Titulo"
+	titulo.Size = UDim2.new(1, 0, 0, 40)
+	titulo.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	titulo.Text = "💰 VENDER ITENS"
+	titulo.TextColor3 = Color3.fromRGB(255, 255, 255)
+	titulo.TextSize = 20
+	titulo.Font = Enum.Font.GothamBold
+	titulo.Parent = frame
+	
+	local tituloCorner = Instance.new("UICorner")
+	tituloCorner.CornerRadius = UDim.new(0, 10)
+	tituloCorner.Parent = titulo
+	
+	local scroll = Instance.new("ScrollingFrame")
+	scroll.Name = "ItensList"
+	scroll.Size = UDim2.new(1, -20, 0, 280)
+	scroll.Position = UDim2.new(0, 10, 0, 50)
+	scroll.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	scroll.BorderSizePixel = 0
+	scroll.ScrollBarThickness = 6
+	scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+	scroll.Parent = frame
+	
+	local scrollCorner = Instance.new("UICorner")
+	scrollCorner.CornerRadius = UDim.new(0, 8)
+	scrollCorner.Parent = scroll
+	
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 5)
+	layout.Parent = scroll
+	
+	local botoesFrame = Instance.new("Frame")
+	botoesFrame.Name = "Botoes"
+	botoesFrame.Size = UDim2.new(1, -20, 0, 50)
+	botoesFrame.Position = UDim2.new(0, 10, 1, -60)
+	botoesFrame.BackgroundTransparency = 1
+	botoesFrame.Parent = frame
+	
+	local btnVender = Instance.new("TextButton")
+	btnVender.Name = "BtnVender"
+	btnVender.Size = UDim2.new(0.48, 0, 1, 0)
+	btnVender.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+	btnVender.Text = "VENDER TUDO"
+	btnVender.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btnVender.TextSize = 16
+	btnVender.Font = Enum.Font.GothamBold
+	btnVender.Parent = botoesFrame
+	
+	local btnCorner = Instance.new("UICorner")
+	btnCorner.CornerRadius = UDim.new(0, 8)
+	btnCorner.Parent = btnVender
+	
+	local btnCancelar = Instance.new("TextButton")
+	btnCancelar.Name = "BtnCancelar"
+	btnCancelar.Size = UDim2.new(0.48, 0, 1, 0)
+	btnCancelar.Position = UDim2.new(0.52, 0, 0, 0)
+	btnCancelar.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+	btnCancelar.Text = "CANCELAR"
+	btnCancelar.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btnCancelar.TextSize = 16
+	btnCancelar.Font = Enum.Font.GothamBold
+	btnCancelar.Parent = botoesFrame
+	
+	local btnCancelarCorner = Instance.new("UICorner")
+	btnCancelarCorner.CornerRadius = UDim.new(0, 8)
+	btnCancelarCorner.Parent = btnCancelar
+	
+	local infoLabel = Instance.new("TextLabel")
+	infoLabel.Name = "Info"
+	infoLabel.Size = UDim2.new(1, -20, 0, 30)
+	infoLabel.Position = UDim2.new(0, 10, 0, 335)
+	infoLabel.BackgroundTransparency = 1
+	infoLabel.Text = "Clique nos itens para selecionar"
+	infoLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+	infoLabel.TextSize = 12
+	infoLabel.Font = Enum.Font.Gotham
+	infoLabel.Parent = frame
+	
+	local btnFechar = Instance.new("TextButton")
+	btnFechar.Name = "BtnFechar"
+	btnFechar.Size = UDim2.new(0, 30, 0, 30)
+	btnFechar.Position = UDim2.new(1, -35, 0, 5)
+	btnFechar.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+	btnFechar.Text = "X"
+	btnFechar.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btnFechar.TextSize = 18
+	btnFechar.Font = Enum.Font.GothamBold
+	btnFechar.Parent = frame
+	
+	local fecharCorner = Instance.new("UICorner")
+	fecharCorner.CornerRadius = UDim.new(0, 6)
+	fecharCorner.Parent = btnFechar
+	
+	gui.Parent = playerGui
+	return gui
+end
+
+-- PEGAR TODOS OS ITENS
+local function getTodosItens(player)
+	local itens = {}
+	
+	local backpack = player:FindFirstChild("Backpack")
+	if backpack then
+		for _, item in pairs(backpack:GetChildren()) do
+			if item:IsA("Tool") then
+				table.insert(itens, {tool = item, lugar = "Backpack"})
+			end
+		end
+	end
+	
+	local character = player.Character
+	if character then
+		for _, item in pairs(character:GetChildren()) do
+			if item:IsA("Tool") then
+				table.insert(itens, {tool = item, lugar = "Character"})
+			end
+		end
+	end
+	
+	return itens
+end
+
+-- Atualizar lista
+local function atualizarLista(player, gui)
+	local scroll = gui.MainFrame.ItensList
+	
+	for _, child in pairs(scroll:GetChildren()) do
+		if child:IsA("TextButton") then child:Destroy() end
+	end
+	
+	local todosItens = getTodosItens(player)
+	local itensValidos = {}
+	
+	for _, data in pairs(todosItens) do
+		local valor = extrairValor(data.tool.Name)
+		if valor > 0 then
+			table.insert(itensValidos, {
+				tool = data.tool, 
+				nome = data.tool.Name, 
+				valor = valor,
+				lugar = data.lugar
+			})
+		end
+	end
+	
+	for i, data in ipairs(itensValidos) do
+		local btn = Instance.new("TextButton")
+		btn.Name = "Item_"..data.nome
+		btn.Size = UDim2.new(1, -10, 0, 50)
+		btn.BackgroundColor3 = CONFIG.CorNormal
+		btn.Text = ""
+		btn.AutoButtonColor = false
+		btn.Parent = scroll
+		
+		local btnCorner = Instance.new("UICorner")
+		btnCorner.CornerRadius = UDim.new(0, 6)
+		btnCorner.Parent = btn
+		
+		local nomeLabel = Instance.new("TextLabel")
+		nomeLabel.Size = UDim2.new(0.5, 0, 1, 0)
+		nomeLabel.Position = UDim2.new(0, 10, 0, 0)
+		nomeLabel.BackgroundTransparency = 1
+		nomeLabel.Text = extrairNomeBase(data.nome)
+		nomeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		nomeLabel.TextSize = 14
+		nomeLabel.Font = Enum.Font.GothamBold
+		nomeLabel.TextXAlignment = Enum.TextXAlignment.Left
+		nomeLabel.Parent = btn
+		
+		local valorLabel = Instance.new("TextLabel")
+		valorLabel.Size = UDim2.new(0.25, 0, 1, 0)
+		valorLabel.Position = UDim2.new(0.5, 0, 0, 0)
+		valorLabel.BackgroundTransparency = 1
+		valorLabel.Text = "$"..data.valor
+		valorLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+		valorLabel.TextSize = 14
+		valorLabel.Font = Enum.Font.GothamBold
+		valorLabel.Parent = btn
+		
+		local lugarLabel = Instance.new("TextLabel")
+		lugarLabel.Size = UDim2.new(0.2, 0, 1, 0)
+		lugarLabel.Position = UDim2.new(0.75, 0, 0, 0)
+		lugarLabel.BackgroundTransparency = 1
+		lugarLabel.Text = data.lugar == "Character" and "👋" or "🎒"
+		lugarLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+		lugarLabel.TextSize = 12
+		lugarLabel.Parent = btn
+		
+		btn:SetAttribute("Selecionado", false)
+		btn:SetAttribute("NomeItem", data.nome)
+		btn:SetAttribute("LugarItem", data.lugar)
+		
+		btn.MouseButton1Click:Connect(function()
+			local selecionado = not btn:GetAttribute("Selecionado")
+			btn:SetAttribute("Selecionado", selecionado)
+			
+			local cor = selecionado and CONFIG.CorSelecionado or CONFIG.CorNormal
+			TweenService:Create(btn, TweenInfo.new(CONFIG.TempoTween), {BackgroundColor3 = cor}):Play()
+			
+			local algumSelecionado = false
+			for _, child in pairs(scroll:GetChildren()) do
+				if child:IsA("TextButton") and child:GetAttribute("Selecionado") then
+					algumSelecionado = true
+					break
+				end
+			end
+			
+			local btnVender = gui.MainFrame.Botoes.BtnVender
+			btnVender.Text = algumSelecionado and "VENDER SELECIONADOS" or "VENDER TUDO"
+		end)
+	end
+	
+	scroll.CanvasSize = UDim2.new(0, 0, 0, #itensValidos * 55)
+	
+	if #itensValidos == 0 then
+		local vazio = Instance.new("TextLabel")
+		vazio.Size = UDim2.new(1, 0, 0, 50)
+		vazio.BackgroundTransparency = 1
+		vazio.Text = "Nenhum item para vender"
+		vazio.TextColor3 = Color3.fromRGB(150, 150, 150)
+		vazio.TextSize = 14
+		vazio.Parent = scroll
+	end
+end
+
+-- Processar venda
+local function processarVenda(player, apenasSelecionados)
+	local leaderstats = player:FindFirstChild("leaderstats")
+	local moedas = leaderstats and leaderstats:FindFirstChild(CONFIG.PrefixoMoeda)
+	
+	if not moedas then return 0 end
+	
+	local gui = player.PlayerGui:FindFirstChild("VendaGUI")
+	local scroll = gui and gui.MainFrame.ItensList
+	
+	local totalGanho = 0
+	local itensParaVender = {}
+	local todosItens = getTodosItens(player)
+	
+	for _, data in pairs(todosItens) do
+		local item = data.tool
+		local valor = extrairValor(item.Name)
+		
+		if valor > 0 then
+			local deveVender = true
+			
+			if apenasSelecionados and scroll then
+				local btn = scroll:FindFirstChild("Item_"..item.Name)
+				deveVender = btn and btn:GetAttribute("Selecionado") or false
+			end
+			
+			if deveVender then
+				totalGanho += valor
+				table.insert(itensParaVender, item)
+			end
+		end
+	end
+	
+	local vendidos = #itensParaVender
+	
+	for _, item in ipairs(itensParaVender) do
+		pcall(function()
+			item:Destroy()
+		end)
+	end
+	
+	if vendidos > 0 then
+		moedas.Value += totalGanho
+	end
+	
+	return vendidos
+end
+
+-- Setup ProximityPrompt
+local function setupVendedor()
+	local vendedor = workspace:FindFirstChild("Vendedor")
+	if not vendedor then
+		vendedor = Instance.new("Part")
+		vendedor.Name = "Vendedor"
+		vendedor.Size = Vector3.new(4, 6, 4)
+		vendedor.Position = Vector3.new(0, 3, 0)
+		vendedor.Anchored = true
+		vendedor.BrickColor = BrickColor.new("Bright green")
+		vendedor.Parent = workspace
+	end
+	
+	local prompt = vendedor:FindFirstChild("ProximityPrompt")
+	if not prompt then
+		prompt = Instance.new("ProximityPrompt")
+		prompt.ActionText = "Vender Itens"
+		prompt.ObjectText = "Mercador"
+		prompt.HoldDuration = 0
+		prompt.MaxActivationDistance = 10
+		prompt.KeyboardKeyCode = Enum.KeyCode.E
+		prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
+		prompt.Parent = vendedor
+	end
+	
+	prompt.Triggered:Connect(function(player)
+		local gui = player.PlayerGui:FindFirstChild("VendaGUI") or criarGUI(player)
+		atualizarLista(player, gui)
+		gui.Enabled = true
+		
+		local btnVender = gui.MainFrame.Botoes.BtnVender
+		local btnCancelar = gui.MainFrame.Botoes.BtnCancelar
+		local btnFechar = gui.MainFrame:FindFirstChild("BtnFechar")
+		
+		if gui:GetAttribute("ConexaoVender") then
+			gui:GetAttribute("ConexaoVender"):Disconnect()
+		end
+		if gui:GetAttribute("ConexaoCancelar") then
+			gui:GetAttribute("ConexaoCancelar"):Disconnect()
+		end
+		if gui:GetAttribute("ConexaoFechar") then
+			gui:GetAttribute("ConexaoFechar"):Disconnect()
+		end
+		
+		local conVender = btnVender.MouseButton1Click:Connect(function()
+			local modoSelecionados = btnVender.Text:match("SELECIONADOS") ~= nil
+			local vendidos = processarVenda(player, modoSelecionados)
+			
+			gui.Enabled = false
+			btnVender.Text = "VENDER TUDO"
+			
+			-- Só toca som se vendeu algo, sem nenhuma mensagem
+			if vendidos > 0 then
+				tocarSom(player, CONFIG.SomVenda)
+			end
+		end)
+		
+		local function fecharGUI()
+			gui.Enabled = false
+			btnVender.Text = "VENDER TUDO"
+		end
+		
+		local conCancelar = btnCancelar.MouseButton1Click:Connect(fecharGUI)
+		local conFechar = btnFechar and btnFechar.MouseButton1Click:Connect(fecharGUI)
+		
+		gui:SetAttribute("ConexaoVender", conVender)
+		gui:SetAttribute("ConexaoCancelar", conCancelar)
+		gui:SetAttribute("ConexaoFechar", conFechar)
+	end)
+end
+
+-- Criar leaderstats
+local function setupLeaderstats(player)
+	local leaderstats = player:FindFirstChild("leaderstats") or Instance.new("Folder")
+	leaderstats.Name = "leaderstats"
+	leaderstats.Parent = player
+	
+	local coins = leaderstats:FindFirstChild(CONFIG.PrefixoMoeda) or Instance.new("IntValue")
+	coins.Name = CONFIG.PrefixoMoeda
+	coins.Value = 0
+	coins.Parent = leaderstats
+end
+
+-- Inicializar
+setupVendedor()
+
+Players.PlayerAdded:Connect(function(player)
+	setupLeaderstats(player)
+	player.CharacterAdded:Connect(function()
+		task.wait(1)
+		if not player.PlayerGui:FindFirstChild("VendaGUI") then
+			criarGUI(player)
+		end
+	end)
+end)
+
+for _, player in pairs(Players:GetPlayers()) do
+	setupLeaderstats(player)
+	criarGUI(player)
+end
+
+print("✅ Sistema de venda sem flop de msg carregado!")
