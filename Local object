@@ -1,0 +1,121 @@
+-- UI Mobile-First - Botão pequeno acima do jump
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UIS = game:GetService("UserInputService")
+
+local plr = Players.LocalPlayer
+local playerGui = plr:WaitForChild("PlayerGui")
+
+-- Esperar o jump button carregar (mobile)
+local touchGui = playerGui:WaitForChild("TouchGui", 5)
+local jumpButton = touchGui and touchGui:FindFirstChild("TouchControlFrame"):FindFirstChild("JumpButton") or nil
+
+-- Criar GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "CarregarGUI"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+-- Frame container (para posicionar facilmente)
+local frame = Instance.new("Frame")
+frame.Name = "Container"
+frame.BackgroundTransparency = 1
+frame.Size = UDim2.new(0, 70, 0, 70)
+
+-- Posicionar: Esquerda, acima do jump button ou no canto inferior esquerdo
+if jumpButton then
+    -- Mobile: acima do jump button
+    frame.Position = UDim2.new(0, 20, 1, -160) -- Ajuste fino acima do jump
+else
+    -- PC: canto inferior esquerdo
+    frame.Position = UDim2.new(0, 20, 1, -90)
+end
+
+frame.Parent = gui
+
+-- Botão circular pequeno
+local btn = Instance.new("TextButton")
+btn.Name = "BtnCarregar"
+btn.Size = UDim2.new(0, 55, 0, 55) -- Pequeno 55x55
+btn.Position = UDim2.new(0.5, -27, 0.5, -27) -- Centro do frame
+btn.BackgroundColor3 = Color3.fromRGB(0, 200, 100) -- Verde
+btn.TextColor3 = Color3.new(1, 1, 1)
+btn.Text = "PEGAR"
+btn.TextScaled = true
+btn.Font = Enum.Font.GothamBlack
+btn.Visible = false
+btn.Parent = frame
+
+-- Círculo perfeito
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(1, 0) -- Círculo completo
+corner.Parent = btn
+
+-- Sombra sutil
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.new(1, 1, 1)
+stroke.Thickness = 2
+stroke.Transparency = 0.3
+stroke.Parent = btn
+
+-- Ícone de mão (opcional, usando texto)
+local icone = Instance.new("TextLabel")
+icone.Name = "Icone"
+icone.Size = UDim2.new(1, 0, 0.6, 0)
+icone.Position = UDim2.new(0, 0, 0, 0)
+icone.BackgroundTransparency = 1
+icone.Text = "✋"
+icone.TextScaled = true
+icone.Parent = btn
+icone.Visible = false -- Escondido por padrão, mostra texto
+
+-- Eventos remotos
+local Carregar = ReplicatedStorage:WaitForChild("CarregarObjeto")
+local Soltar = ReplicatedStorage:WaitForChild("SoltarObjeto")
+local Atualizar = ReplicatedStorage:WaitForChild("AtualizarBotao")
+
+local carregando = false
+
+-- Atualizar UI
+Atualizar.OnClientEvent:Connect(function(visivel, nome)
+    if nome == "SOLTAR" then
+        carregando = true
+        btn.BackgroundColor3 = Color3.fromRGB(255, 80, 80) -- Vermelho
+        btn.Text = "SOLTAR"
+        btn.Visible = true
+    elseif visivel and nome then
+        carregando = false
+        btn.BackgroundColor3 = Color3.fromRGB(0, 200, 100) -- Verde
+        btn.Text = nome:sub(1, 4) -- Abrevia: "CAIX" ou "PEDR"
+        btn.Visible = true
+    else
+        btn.Visible = false
+    end
+end)
+
+-- Clique
+btn.MouseButton1Click:Connect(function()
+    if not carregando then
+        Carregar:FireServer()
+    else
+        Soltar:FireServer()
+    end
+end)
+
+-- Teclado (E)
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.E and btn.Visible then
+        btn.MouseButton1Click:Fire()
+    end
+end)
+
+-- Ajustar se tela mudar (rotação mobile)
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+    if jumpButton and jumpButton.Parent then
+        frame.Position = UDim2.new(0, 20, 1, -160)
+    else
+        frame.Position = UDim2.new(0, 20, 1, -90)
+    end
+end)
+
