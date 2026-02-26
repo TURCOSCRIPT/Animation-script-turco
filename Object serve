@@ -1,0 +1,153 @@
+-- Sistema de Carregamento Mobile-First
+-- ServerScript em ServerScriptService
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+-- Eventos
+local CarregarObjeto = Instance.new("RemoteEvent")
+CarregarObjeto.Name = "CarregarObjeto"
+CarregarObjeto.Parent = ReplicatedStorage
+
+local SoltarObjeto = Instance.new("RemoteEvent")
+SoltarObjeto.Name = "SoltarObjeto"
+SoltarObjeto.Parent = ReplicatedStorage
+
+local AtualizarBotao = Instance.new("RemoteEvent")
+AtualizarBotao.Name = "AtualizarBotao"
+AtualizarBotao.Parent = ReplicatedStorage
+
+-- Config
+local DISTANCIA = 12
+local ALTURA = 3.5
+local FRENTE = 2.5
+local VEL_NORMAL = 16
+local VEL_PEDRA = 10
+
+local carregando = {}
+local conexoes = {}
+
+-- Encontrar objeto
+local function getObjeto(pos)
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj.Name == "Caixa" or obj.Name == "Pedra" then
+            local p = obj:IsA("BasePart") and obj or obj.PrimaryPart
+            if p and (p.Position - pos).Magnitude <= DISTANCIA then
+                return obj
+            end
+        end
+    end
+    return nil
+end
+
+-- Mover objeto
+local function setPos(obj, pos)
+    if obj:IsA("BasePart") then
+        obj.CFrame = CFrame.new(pos)
+    elseif obj.PrimaryPart then
+        obj:PivotTo(CFrame.new(pos))
+    end
+end
+
+-- Física
+local function setFisica(obj, ativa)
+    local anc = not ativa
+    if obj:IsA("BasePart") then
+        obj.Anchored = anc
+        obj.CanCollide = ativa
+    else
+        for _, p in pairs(obj:GetDescendants()) do
+            if p:IsA("BasePart") then
+                p.Anchored = anc
+                p.CanCollide = ativa
+            end
+        end
+    end
+end
+
+-- Loop de proximidade
+task.spawn(function()
+    while true do
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr.Character and not carregando[plr.UserId] then
+                local hum = plr.Character:FindFirstChild("Humanoid")
+                local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                if hum and hum.Health > 0 and hrp then
+                    local obj = getObjeto(hrp.Position)
+                    AtualizarBotao:FireClient(plr, obj and true or false, obj and obj.Name or nil)
+                end
+            end
+        end
+        task.wait(0.3)
+    end
+end)
+
+-- Carregar
+CarregarObjeto.OnServerEvent:Connect(function(plr)
+    if carregando[plr.UserId] then return end
+    
+    local char = plr.Character
+    if not char then return end
+    
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    if not hrp or not hum or hum.Health <= 0 then return end
+    
+    local obj = getObjeto(hrp.Position)
+    if not obj then return end
+    
+    carregando[plr.UserId] = {obj = obj, pedra = obj.Name == "Pedra"}
+    setFisica(obj, false)
+    
+    if obj.Name == "Pedra" then
+        hum.WalkSpeed = VEL_PEDRA
+    end
+    
+    -- Seguir player
+    conexoes[plr.UserId] = RunService.Heartbeat:Connect(function()
+        if not carregando[plr.UserId] or not plr.Character then return end
+        local h = plr.Character:FindFirstChild("HumanoidRootPart")
+        if not h then return end
+        setPos(obj, h.Position + Vector3.new(0, ALTURA, 0))
+    end)
+    
+    AtualizarBotao:FireClient(plr, true, "SOLTAR")
+end)
+
+-- Soltar
+local function soltar(plr)
+    local dados = carregando[plr.UserId]
+    if not dados then return end
+    
+    if conexoes[plr.UserId] then
+        conexoes[plr.UserId]:Disconnect()
+        conexoes[plr.UserId] = nil
+    end
+    
+    carregando[plr.UserId] = nil
+    
+    local char = plr.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChild("Humanoid")
+    
+    if hrp then
+        setPos(dados.obj, hrp.Position + hrp.CFrame.LookVector * FRENTE + Vector3.new(0, 1, 0))
+    end
+    
+    setFisica(dados.obj, true)
+    
+    if dados.pedra and hum then
+        hum.WalkSpeed = VEL_NORMAL
+    end
+    
+    AtualizarBotao:FireClient(plr, false)
+end
+
+SoltarObjeto.OnServerEvent:Connect(soltar)
+
+-- Limpar
+Players.PlayerRemoving:Connect(function(plr)
+    if carregando[plr.UserId] then soltar(plr) end
+end)
+                               
